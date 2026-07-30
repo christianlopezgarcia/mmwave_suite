@@ -1,0 +1,13 @@
+Pairwise agreement (Jaccard, tagged sets):
+                              method1   method2   method3   method4   method5
+method1_mti_filter               1.00      0.07      0.03      0.00      0.00
+method2_cocell_secondary         0.07      1.00      0.10      0.13      0.26
+method3_snr_range_anomaly        0.03      0.10      1.00      0.11      0.28
+method4_mirror_geometry          0.00      0.13      0.11      1.00      0.42
+method5_consensus                0.00      0.26      0.28      0.42      1.00
+
+  method1_mti_filter      1922 /  4805 points tagged (40.0%)  -- static (|doppler bin| <= 1) tagged
+  method2_cocell_secondary   531 /  4805 points tagged (11.1%)  -- secondary peaks sharing a range-Doppler cell
+  method3_snr_range_anomaly   381 /  4805 points tagged (7.9%)  -- SNR excess <= -3.0 dB and >= 0.50 m behind the primary
+  method4_mirror_geometry   251 /  4805 points tagged (5.2%)  -- 0.50-6.00 m behind primary, |dv|<=0.191 m/s, |daz|>=8 deg, moving
+  method5_consensus        196 /  4805 points tagged (4.1%)  -- >= 2 of 3 independent tests agree

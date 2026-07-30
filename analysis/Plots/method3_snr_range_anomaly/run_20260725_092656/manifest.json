@@ -1,0 +1,55 @@
+{
+  "run": "run_20260725_092656",
+  "bucket": "method3_snr_range_anomaly",
+  "source": "C:\\Users\\c1op3\\Desktop\\Occupations\\Engineering Career\\Ms_EEE\\EEE_500\\repo\\runs\\run_20260725_092656\\run_20260725_092656.dat",
+  "tier": "C+ (range profile + point cloud)",
+  "method": {
+    "name": "method3_snr_range_anomaly",
+    "description": "SNR excess <= -3.0 dB and >= 0.50 m behind the primary",
+    "rationale": "Each specular bounce costs energy. The range-trend removal is what stops this degenerating into a range gate.",
+    "params": {
+      "snr_excess_db": -3.0,
+      "min_range_gain_m": 0.5
+    },
+    "n_tagged": 381,
+    "fraction": 0.07929240374609782
+  },
+  "n_points": 4805,
+  "n_frames": 952,
+  "integrity": {
+    "lost_bytes": 0,
+    "resyncs": 0
+  },
+  "figures": [
+    "RT_filtered.png",
+    "VT_filtered.png",
+    "RT_VT_pair_filtered.png",
+    "RT_baseline_removed_filtered.png",
+    "envelope_steps_filtered.png",
+    "step_intervals_filtered.png"
+  ],
+  "metrics": {
+    "n_steps": 53,
+    "walking_time_s": 29.7,
+    "cadence_steps_per_min": 107.07070707070707,
+    "mean_step_time_s": 0.5622448979591836,
+    "std_step_time_s": 0.23285604732432907,
+    "cv_step_time_pct": 41.41541313572459,
+    "median_step_time_s": 0.5,
+    "n_segments": 4,
+    "recording_duration_s": 47.550000000000004,
+    "walking_fraction": 0.6246056782334384,
+    "mape_pct": null,
+    "n_steps_ground_truth": null
+  },
+  "cadence_spectral": {
+    "step_freq_hz": 1.407563025210084,
+    "cadence_steps_per_min": 84.45378151260503,
+    "confidence": 0.02135393896203397
+  },
+  "cadence_agreement_pct": 21.123355002378318,
+  "rt_provenance": "dense range profile (TLV 2), TI Q-format -> dB. Not a Doppler marginal: it is the measured range spectrum.",
+  "vt_provenance": "SPARSE: detected points binned by Doppler. This is NOT the paper's dense VT -- CFAR removed sub-threshold micro-Doppler before the host saw it.",
+  "envelope_provenance": "Eq.(2) applied to the per-frame detected-point speed set (percentile_98, median+3.0*MAD, smooth 3). SPARSE: post-CFAR points, not a dense VT column.",
+  "steps_provenance": "peaks with v_min=0.20 m/s, min spacing 0.25 s, adaptive prominence 0.1671 (15% of envelope IQR), constrained to 4 walking segment(s) | Eq.(2) applied to the per-frame detected-point speed set (percentile_98, median+3.0*MAD, smooth 3). SPARSE: post-CFAR points, not a dense VT column."
+}

@@ -1,0 +1,78 @@
+{
+  "run": "run_20260725_092656",
+  "bucket": "raw_unfiltered",
+  "source": "C:\\Users\\c1op3\\Desktop\\Occupations\\Engineering Career\\Ms_EEE\\EEE_500\\repo\\runs\\run_20260725_092656\\run_20260725_092656.dat",
+  "tier": "C+ (range profile + point cloud)",
+  "geometry": {
+    "num_range_bins": 128,
+    "num_doppler_bins": 128,
+    "range_resolution_m": 0.08720424107328491,
+    "doppler_resolution_mps": 0.06354864897089475,
+    "true_velocity_resolution_mps": 0.084731531961193,
+    "max_velocity_mps": 4.067113534137264,
+    "fps": 20.0
+  },
+  "integrity": {
+    "lost_bytes": 0,
+    "resyncs": 0,
+    "anomalies": {}
+  },
+  "on_chip_gating": {
+    "cfar_range_threshold_db": 15.0,
+    "cfar_doppler_threshold_db": 15.0,
+    "range_fov_m": [
+      0.0,
+      8.93
+    ],
+    "doppler_fov_mps": [
+      -4.07,
+      4.07
+    ],
+    "azimuth_fov_deg": [
+      -90.0,
+      90.0
+    ],
+    "elevation_fov_deg": [
+      -90.0,
+      90.0
+    ],
+    "clutter_removal": 0,
+    "multi_obj_beamforming": 1,
+    "multi_obj_threshold": 0.5,
+    "extended_max_velocity": 0
+  },
+  "n_points": 4805,
+  "n_frames": 952,
+  "figures": [
+    "RT.png",
+    "VT.png",
+    "RT_VT_pair.png",
+    "RT_baseline_removed.png",
+    "envelope_steps.png",
+    "step_intervals.png"
+  ],
+  "metrics": {
+    "n_steps": 54,
+    "walking_time_s": 30.15,
+    "cadence_steps_per_min": 107.46268656716418,
+    "mean_step_time_s": 0.561,
+    "std_step_time_s": 0.22503741185565995,
+    "cv_step_time_pct": 40.113620651632786,
+    "median_step_time_s": 0.549999999999998,
+    "n_segments": 4,
+    "recording_duration_s": 47.550000000000004,
+    "walking_fraction": 0.6340694006309148,
+    "mape_pct": null,
+    "n_steps_ground_truth": null
+  },
+  "cadence_spectral": {
+    "step_freq_hz": 1.407563025210084,
+    "cadence_steps_per_min": 84.45378151260503,
+    "confidence": 0.019291274920641276
+  },
+  "cadence_agreement_pct": 21.41106442577032,
+  "rt_provenance": "dense range profile (TLV 2), TI Q-format -> dB. Not a Doppler marginal: it is the measured range spectrum.",
+  "vt_provenance": "SPARSE: detected points binned by Doppler. This is NOT the paper's dense VT -- CFAR removed sub-threshold micro-Doppler before the host saw it.",
+  "envelope_provenance": "Eq.(2) applied to the per-frame detected-point speed set (percentile_98, median+3.0*MAD, smooth 3). SPARSE: post-CFAR points, not a dense VT column.",
+  "steps_provenance": "peaks with v_min=0.20 m/s, min spacing 0.25 s, adaptive prominence 0.1712 (15% of envelope IQR), constrained to 4 walking segment(s) | Eq.(2) applied to the per-frame detected-point speed set (percentile_98, median+3.0*MAD, smooth 3). SPARSE: post-CFAR points, not a dense VT column."
+}
