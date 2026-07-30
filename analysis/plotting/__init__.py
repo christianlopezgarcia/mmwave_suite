@@ -1,1 +1,1 @@
-from . import maps, gait, ghosts                                   # noqa: F401
+from . import maps, gait, ghosts, pointcloud, diagnostics  # noqa: F401

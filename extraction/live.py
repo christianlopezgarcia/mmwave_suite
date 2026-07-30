@@ -59,6 +59,39 @@ NO_DATA_WARN_SECONDS = 3.0
 # Flush the .dat this often so an abnormal exit costs at most this much.
 FLUSH_INTERVAL_SECONDS = 2.0
 
+# Keep run-directory names short enough that the nested Plots/<method>/ paths
+# below them stay clear of Windows' 260-character path limit.
+MAX_LABEL_CHARS = 48
+
+
+def slugify(text: str, max_chars: int = MAX_LABEL_CHARS) -> str:
+    """Turn a free-text description into a filesystem-safe name fragment.
+
+    Lower-cased, spaces and punctuation collapsed to single hyphens, and
+    restricted to [a-z0-9-_]. Windows forbids \\ / : * ? " < > | in names, and
+    trailing dots or spaces silently break path handling, so this is stricter
+    than strictly necessary rather than risk an unopenable directory.
+    """
+    import re
+    s = text.strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    s = re.sub(r"-{2,}", "-", s).strip("-_")
+    return s[:max_chars].rstrip("-_")
+
+
+def make_run_name(label: Optional[str] = None,
+                  when: Optional[datetime] = None) -> str:
+    """`run_<timestamp>[_<label>]`.
+
+    The timestamp stays FIRST on purpose: run directories then sort
+    chronologically by name, and `--latest` keeps working regardless of what
+    you called the test. Putting the description first would scatter a session
+    alphabetically.
+    """
+    stamp = (when or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    slug = slugify(label) if label else ""
+    return "run_%s_%s" % (stamp, slug) if slug else "run_%s" % stamp
+
 
 class LiveCapture:
     def __init__(self,
@@ -67,6 +100,7 @@ class LiveCapture:
                  cfg_path: str,
                  out_dir: str,
                  name: Optional[str] = None,
+                 label: Optional[str] = None,
                  cli_baud: int = 115200,
                  data_baud: int = 921600,
                  record_raw: bool = True,
@@ -78,7 +112,13 @@ class LiveCapture:
         self.verbose = verbose
         self.record_raw = record_raw
 
-        self.name = name or ("run_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
+        # The raw description is kept verbatim for meta.json; only the directory
+        # name is slugified. Losing the original wording to a slug would be a
+        # needless loss -- "walking behind 2x4 plywood wall, 3 m" does not
+        # survive filesystem sanitisation, but it is exactly what you want to
+        # read six weeks later.
+        self.label = (label or "").strip() or None
+        self.name = name or make_run_name(self.label)
         self.run_dir = os.path.join(out_dir, self.name)
         os.makedirs(self.run_dir, exist_ok=True)
 
@@ -167,6 +207,8 @@ class LiveCapture:
 
     def start(self, on_frame: Optional[Callable[[Frame], None]] = None) -> None:
         self._log("run directory: %s" % self.run_dir)
+        if self.label:
+            self._log("label: %s" % self.label)
         self._log(self.cfg.summary())
 
         shutil.copyfile(self.cfg_path, os.path.join(self.run_dir, self.name + ".cfg"))
@@ -193,6 +235,7 @@ class LiveCapture:
 
         meta = {
             "name": self.name,
+            "label": self.label,
             "started_utc": datetime.now(timezone.utc).isoformat(),
             "cli_port": self.link.cli_port_name,
             "data_port": self.link.data_port_name,
@@ -342,7 +385,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--data", help="data COM port (e.g. COM5)")
     ap.add_argument("--cfg", required=False, help="path to .cfg")
     ap.add_argument("--out", default="./runs", help="output root directory")
-    ap.add_argument("--name", help="run name (default: timestamp)")
+    ap.add_argument("--name",
+                    help="override the whole run name (skips --label)")
+    ap.add_argument("--label", "--desc", dest="label",
+                    help="short description of the test, appended to the "
+                         "timestamped run name. e.g. --label \"behind "
+                         "plywood 3m\" -> run_20260729_203433_behind-plywood-3m. The verbatim text is also stored in meta.json.")
     ap.add_argument("--seconds", type=float, default=0.0,
                     help="stop after N seconds (0 = until Ctrl-C)")
     ap.add_argument("--cli-baud", type=int, default=115200)
@@ -372,7 +420,7 @@ def main(argv: Optional[List[str]] = None) -> int:
               % (cli, data), file=sys.stderr)
         return 2
 
-    cap = LiveCapture(cli, data, a.cfg, a.out, name=a.name,
+    cap = LiveCapture(cli, data, a.cfg, a.out, name=a.name, label=a.label,
                       cli_baud=a.cli_baud, data_baud=a.data_baud,
                       verbose=not a.quiet)
 

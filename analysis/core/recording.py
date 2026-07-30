@@ -135,6 +135,18 @@ class Recording:
     rd_map: Optional[np.ndarray] = None
     """(num_frames, num_doppler_bins, num_range_bins) float. None if absent."""
 
+    # --- TIER B-angle: azimuth heat maps (TLV 4 / TLV 8) ---------------
+    angle_iq: Optional[np.ndarray] = None
+    """(num_frames, num_range_bins, n_antennas) complex64 -- zero-Doppler
+    complex samples per virtual antenna. The ONLY payload TI ships before the
+    angle FFT, so this is what lets you do your own beamforming. TLV 8 on AOP
+    parts, TLV 4 elsewhere."""
+    angle_tlv: Optional[int] = None
+    """4 or 8 -- which heat-map TLV supplied angle_iq."""
+
+    temperature: List[Optional[Dict]] = field(default_factory=list)
+    """Per frame, TLV 9: Rx/Tx/PM/digital die temperatures in degrees C."""
+
     cfg_path: str = ""
     cfg_is_fallback: bool = False
     """True when no .cfg was found beside the .dat and a library default was
@@ -158,11 +170,30 @@ class Recording:
 
     @property
     def tier(self) -> str:
+        bits = []
         if self.rd_map is not None:
-            return "B (range-Doppler map)"
+            bits.append("range-Doppler map")
+        if self.angle_iq is not None:
+            bits.append("angle I/Q (TLV %d)" % (self.angle_tlv or 8))
+        if bits:
+            return "B (%s)" % " + ".join(bits)
         if self.range_profile is not None:
             return "C+ (range profile + point cloud)"
         return "C (point cloud only)"
+
+    @property
+    def available_payloads(self) -> Dict[str, bool]:
+        """What this recording actually contains, for figure gating."""
+        return {
+            "point_cloud (TLV 1)": bool(self.points) and self.total_points > 0,
+            "range_profile (TLV 2)": self.range_profile is not None,
+            "noise_profile (TLV 3)": self.noise_profile is not None,
+            "angle_iq (TLV 4/8)": self.angle_iq is not None,
+            "range_doppler (TLV 5)": self.rd_map is not None,
+            "stats (TLV 6)": any(x for x in self.stats),
+            "side_info (TLV 7)": any(x is not None and x.size for x in self.side_info),
+            "temperature (TLV 9)": any(x for x in self.temperature),
+        }
 
     @property
     def total_points(self) -> int:

@@ -50,6 +50,8 @@ from ..micro_doppler.tracking import track_from_points
 from ..plotting import gait as gplot
 from ..plotting import ghosts as ghplot
 from ..plotting import maps as mplot
+from ..plotting import pointcloud as pcplot
+from ..plotting import diagnostics as dgplot
 
 RAW_DIR = "raw_unfiltered"
 
@@ -216,6 +218,35 @@ def run_gait(rec: Recording, out_dir: str, roi_m=None,
         steps, title="Step intervals -- %s" % rec.name,
         save_path=os.path.join(out_dir, "step_intervals%s.png" % suffix)))
 
+    # --- point-cloud views (ported from dat_parser_plots_v2). Kept in their own
+    # subfolder: they answer a different question from the dense maps above --
+    # per-DETECTION attributes (SNR, azimuth, elevation) rather than per-CELL
+    # signal. The angle panels in particular have no dense equivalent.
+    pc_dir = os.path.join(out_dir, "point_cloud_views")
+    os.makedirs(pc_dir, exist_ok=True)
+    pc = pcplot.plot_all(rec, pc_dir, keep_mask=keep_mask, tag=tag)
+    figs.extend(pc)
+
+    # --- payload diagnostics: noise profile (TLV 3), DSP stats (TLV 6),
+    # temperature (TLV 9), beamformed range-azimuth (TLV 4/8). These describe
+    # the CAPTURE rather than the scene, so they are identical across ghost
+    # methods and only written for the raw baseline.
+    if keep_mask is None:
+        dg_dir = os.path.join(out_dir, "payload_diagnostics")
+        figs.extend(dgplot.plot_all(rec, dg_dir))
+
+        # dense azimuth-time, if this capture has angle I/Q
+        if rec.angle_iq is not None:
+            try:
+                from ..core.angle import azimuth_time_map
+                at = azimuth_time_map(rec, track=track, half_width_m=0.5)
+                figs.append(mplot.plot_time_map(
+                    at, "Azimuth-Time (dense, TLV %d) -- %s"
+                    % (rec.angle_tlv or 8, rec.name),
+                    os.path.join(out_dir, "AT_dense_following.png")))
+            except Exception as e:
+                print("   (azimuth-time map failed: %r)" % (e,))
+
     return dict(
         figures=[os.path.basename(x) for x in figs if isinstance(x, str)],
         metrics=metrics.to_dict(),
@@ -367,6 +398,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     rec = load_recording(a.dat, a.cfg)
     print(rec.summary())
+    print()
+    print("Payloads present in this recording:")
+    for k, v in rec.available_payloads.items():
+        print("  %-26s %s" % (k, "yes" if v else "-- absent"))
     print()
 
     if rec.resyncs:

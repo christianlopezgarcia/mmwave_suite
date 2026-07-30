@@ -235,6 +235,33 @@ def load_recording(dat_path: str,
                 M[i, :min(nb, x.size)] = cfg.range_profile_db(x[:nb])
         rec.noise_profile = M
 
+    # Temperature (TLV 9)
+    rec.temperature = [fr.temperature for fr in frames]
+
+    # Angle heat map (TLV 8 on AOP, TLV 4 otherwise). Complex I/Q per virtual
+    # antenna at zero Doppler -- kept UN-transformed so the angle FFT is a
+    # host-side choice rather than baked in.
+    for attr, tlv in (("azimuth_elev_heatmap", 8), ("azimuth_heatmap", 4)):
+        vals = [getattr(fr, attr, None) for fr in frames]
+        good = [x for x in vals if x is not None and getattr(x, "size", 0)]
+        if not good:
+            continue
+        n_ant = (geom.num_virtual_ant if tlv == 8
+                 else max(1, cfg.num_tx_azim_ant) * geom.num_rx_ant)
+        nb = geom.num_range_bins
+        if n_ant <= 0 or good[0].size % n_ant:
+            continue
+        M = np.zeros((len(frames), nb, n_ant), dtype=np.complex64)
+        for i, x in enumerate(vals):
+            if x is None or x.size == 0:
+                continue
+            c = x.reshape(-1, n_ant) if x.ndim == 1 else x
+            k = min(nb, c.shape[0])
+            M[i, :k, :] = c[:k, :]
+        rec.angle_iq = M
+        rec.angle_tlv = tlv
+        break
+
     # Range-Doppler map (TLV 5), already column-major-corrected by the parser.
     rd = [fr.range_doppler_heatmap for fr in frames]
     if any(x is not None and getattr(x, "ndim", 0) == 2 for x in rd):
@@ -243,6 +270,12 @@ def load_recording(dat_path: str,
         for i, x in enumerate(rd):
             if x is not None and x.ndim == 2 and x.shape == shape:
                 M[i] = x
+        # fftshift along the Doppler axis. The device sends raw FFT order with
+        # DC (zero Doppler) in row 0; Geometry.velocity_axis() is shifted
+        # (most-negative first), so without this the static-clutter row lands at
+        # the most-negative velocity and the spectrogram is inside-out.
+        # TI does the same at mmWave.js:3308.
+        M = np.roll(M, shape[0] // 2, axis=1)
         rec.rd_map = M
 
     return rec
