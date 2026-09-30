@@ -68,6 +68,14 @@ class TLVType(IntEnum):
     AZIMUTH_ELEVATION_STATIC_HEAT_MAP = 8
     TEMPERATURE_STATS = 9
 
+    # Application TLVs.  Not part of the out-of-box demo -- these only appear
+    # if the EVM is flashed with TI's Gesture-with-Machine-Learning firmware
+    # (radar_toolbox .../Gesture_with_Machine_Learning, mmw_output.h:88-91).
+    # Decoded here rather than in the application package so that a gesture
+    # capture does not log two "unknown_tlv_type" anomalies on every frame.
+    GESTURE_FEATURES = 1050
+    GESTURE_ANN_PROB = 1051
+
 
 # DPIF_PointCloudCartesian -- mmWave.js:2569-2579.  16 bytes, float32 LE.
 POINT_DTYPE = np.dtype(
@@ -139,6 +147,8 @@ class Frame:
     azimuth_heatmap: Optional[np.ndarray] = None       # complex64
     azimuth_elev_heatmap: Optional[np.ndarray] = None  # complex64
     range_doppler_heatmap: Optional[np.ndarray] = None  # uint16, raw row-major
+    gesture_features: Optional[np.ndarray] = None  # float32[10], TLV 1050
+    gesture_probs: Optional[np.ndarray] = None     # float32[10], TLV 1051
     stats: Optional[Dict[str, int]] = None
     temperature: Optional[Dict[str, int]] = None
     unknown_tlvs: Dict[int, bytes] = field(default_factory=dict)
@@ -511,6 +521,21 @@ def _decode_tlv(buf, tlv_type: int, payload: int, tlv_len: int,
                 frame.anomalies.append(
                     "rd_heatmap_size_mismatch (expected %d, got %d)" % (expect, raw.size))
         frame.range_doppler_heatmap = raw
+
+    elif tlv_type in (TLVType.GESTURE_FEATURES, TLVType.GESTURE_ANN_PROB):
+        # main.c:1689-1698 -- both are a bare float32[10], no sub-header.
+        # 1050: the Features_t struct's first ten floats, in declaration order
+        #       (gesture.h:145-154).  1051: ANN_struct_t.prob.
+        n = tlv_len // 4
+        if n != 10:
+            frame.anomalies.append(
+                "gesture_tlv_len (type %d: expected 40 bytes, got %d)"
+                % (tlv_type, tlv_len))
+        v = np.frombuffer(buf, dtype="<f4", count=n, offset=payload)
+        if tlv_type == TLVType.GESTURE_FEATURES:
+            frame.gesture_features = v
+        else:
+            frame.gesture_probs = v
 
     elif tlv_type == TLVType.STATS:
         # mmWave.js:3419-3435 -- 6 x uint32

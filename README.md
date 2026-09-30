@@ -12,17 +12,23 @@ mmwave_suite/
 │   ├── highfidelity/                   bandwidth calc + heat-map configs
 │   ├── cfg/                            config library
 │   └── ARCHITECTURE.md                 TI reverse-engineering reference
-└── analysis/            never touches hardware
-    ├── core/            Recording, RT/VT maps, clutter, angle beamforming
-    ├── micro_doppler/   envelope, steps, gait metrics, tracking
-    ├── ghost_sections/  per-point features, pluggable detectors
-    ├── plotting/        maps, gait, ghosts, pointcloud, diagnostics
-    └── pipelines/run.py the analysis entry point
+├── analysis/            never touches hardware
+│   ├── core/            Recording, RT/VT maps, clutter, angle beamforming
+│   ├── micro_doppler/   envelope, steps, gait metrics, tracking
+│   ├── ghost_sections/  per-point features, pluggable detectors
+│   ├── plotting/        maps, gait, ghosts, pointcloud, diagnostics
+│   └── pipelines/run.py the analysis entry point
+└── application/         decisions, live or replayed
+    ├── common/app.py    the AppModule contract + offline/live drivers
+    ├── gesture_with_machine_learning/   TI's gesture lab, ported
+    └── <others>/        surveyed, not implemented -- one README each
 ```
 
 Anything that can change *what gets recorded* lives in `extraction/`; anything
 that only *interprets* a recording lives in `analysis/`. That is what makes a
-capture auditable after the fact.
+capture auditable after the fact. `application/` sits on top of both: it runs
+on the live stream through `extraction`'s existing frame callback, and the
+same object replays a `.dat` to the same answer.
 
 All commands run from `EEE_500\repo`.
 
@@ -570,7 +576,57 @@ whether two scatterers can actually be separated.
 
 ---
 
-## 9. Known limits
+## 9. Applications -- decisions on the live stream
+
+`application/` runs a decision on frames as they arrive, through
+`extraction.live`'s existing `on_frame` callback, and replays a `.dat` through
+the identical object to the identical answer.
+
+```powershell
+# TI's gesture firmware flashed -- read its features and probabilities
+python -m mmwave_suite.application.gesture_with_machine_learning live --mode onchip
+
+# stock out-of-box firmware -- features computed on the host
+python -m mmwave_suite.application.gesture_with_machine_learning live --mode points `
+  --cfg mmwave_suite\application\gesture_with_machine_learning\cfg\xwr68xx_AOP_gesture_points_30fps.cfg
+
+# replay any existing recording
+python -m mmwave_suite.application.gesture_with_machine_learning replay $latest --mode points
+```
+
+`gesture_with_machine_learning` is TI's Gesture-with-Machine-Learning lab
+ported to the host, with their trained network extracted from the C headers,
+the exact feature maths, a retraining path, and a range budget. The headline
+findings, argued in its
+[README](application/gesture_with_machine_learning/README.md):
+
+- **TI's weights only work on TI's firmware.** Their gesture build uses a
+  *linear*-magnitude detection matrix from **TX1-RX1 only**; the out-of-box
+  demo's TLV 5 is *log2* magnitude summed over twelve virtual antennas. No
+  correction factor relates the two.
+- **The trained model is locked to 23.5 cm +/- 3.6 cm** -- that is the mean and
+  std of its own `weightedRange` normalisation. A hand at 50 cm is +7.4 sigma.
+- **What limits gesture range is angle precision, not SNR.** A hand is at
+  80-90 dB at 30 cm and still 15 dB at 12 m, but the residual RX phase error
+  after calibration floors angle accuracy at ~1.6 deg on a 2-element azimuth
+  aperture. Geometric ceilings: push/pull >10 m, swipe ~1.1 m on 1 TX and
+  ~3.2 m on 3 TX, twirl 0.14-0.43 m. TI's own 2 m gesture variant drops
+  exactly the two finger-scale classes this predicts would die first.
+- **The out-of-box heat-map route is bandwidth-bound at 921600 baud**
+  (10 fps against the 25-30 a gesture needs) -- but the firmware advertises up
+  to 3.125 Mbaud, which nobody here has tested.
+  `application/gesture_with_machine_learning/tools/uart_probe.py` measures it
+  by watching the parser's resync and lost-byte counters.
+
+Every other directory under `application/` is a surveyed placeholder with one
+README: what the TI example is, whether this module can run it, what porting
+costs, and whether it helps the ghost work.
+[`people_tracking/`](application/people_tracking/) and
+[`vital_signs/`](application/vital_signs/) are the two worth doing next.
+
+---
+
+## 10. Known limits
 
 - **Gait metrics are not yet trustworthy, and the cause is partly the capture.**
   On the test run the two independent cadence estimators disagreed, with CV ≈ 78 %
@@ -588,11 +644,24 @@ whether two scatterers can actually be separated.
   matched captures at `multiObjBeamForming -1 1 0.5` and `-1 0 0.5` — has not been
   run.
 - **Raw ADC is impossible over UART** — 11.8 MB/s against a 92 KB/s link, 128×
-  over. Needs LVDS + a DCA1000EVM.
+  over. Needs LVDS + a DCA1000EVM. (The 92 KB/s is 921600 baud, which is a
+  default, not a ceiling -- the demo advertises 3.125 Mbaud. That would not
+  rescue raw ADC, still 38x over, but it does change the TLV-5 budget.
+  Unmeasured; see section 9.)
 - **Coherent (ADC-domain) background subtraction** is out of reach; the
   implemented empty-scene subtraction works on RD magnitudes, weaker than the
   reference MATLAB's pre-FFT cancellation.
-- **No automated tests.** Correctness rests on `audit.py` against real captures
-  and on the cross-checks in `extraction/README.md`, not on a suite.
-- **Licence undecided.** `analysis/archive/ti_mmw_official_tool/` is TI BSD-3;
-  settle the licence for the rest before sharing outside the group.
+- **Almost no automated tests.** `extraction/` and `analysis/` have none;
+  correctness rests on `audit.py` against real captures and the cross-checks in
+  `extraction/README.md`. The one exception is
+  `application/gesture_with_machine_learning/tools/selftest.py`, which checks 32
+  things against synthetic streams with no EVM attached -- and says plainly in
+  its docstring the one claim it cannot test: bit-equivalence with TI's C, which
+  needs a board.
+- **Licence undecided, and now narrower.** `analysis/archive/ti_mmw_official_tool/`
+  is TI BSD-3, but `application/gesture_with_machine_learning/ti_reference/`
+  carries TI's restrictive "Limited License" -- redistributable, **for use only
+  with TI devices**, no reverse engineering of the binaries -- and the port and
+  the extracted weights are derivatives of it. That constrains the whole
+  repository if it is ever published. Settle this before sharing outside the
+  group.

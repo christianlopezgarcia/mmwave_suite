@@ -1,0 +1,47 @@
+{
+  "source": "TI Radar Toolbox 4.00.00.05, Gesture_with_Machine_Learning, src/6443/include/neuralnet",
+  "device": "xWR6443 / xWR6843 (AOP and ODS share one model)",
+  "architecture": "90 -> 30(ReLU) -> 60(ReLU) -> 10(softmax)",
+  "input": {
+    "num_features": 6,
+    "feature_length_frames": 15,
+    "layout": "oldest frame first; within a frame the 6 features are in the order below (objectdetection.c:950-955)",
+    "feature_order": [
+      "weightedDoppler",
+      "weightedAzimuthMean",
+      "weightedElevationMean",
+      "numDetections",
+      "weightedRange",
+      "azimuthDopplerCorr"
+    ],
+    "normalisation": "(x - mean[k]) / std[k], per feature k, applied before the value enters the 15-frame window"
+  },
+  "classes": [
+    "no_gesture",
+    "l2r",
+    "r2l",
+    "u2d",
+    "d2u",
+    "twirl_cw",
+    "twirl_ccw",
+    "off_push",
+    "on_pull",
+    "shine"
+  ],
+  "mean": [
+    -0.41897785663604736,
+    0.04883911833167076,
+    -0.7556013464927673,
+    22.018943786621094,
+    4.386526584625244,
+    0.026537904515862465
+  ],
+  "std": [
+    3.284273624420166,
+    4.637269496917725,
+    3.457549571990967,
+    20.669227600097656,
+    0.6670302152633667,
+    0.5541073679924011
+  ]
+}
