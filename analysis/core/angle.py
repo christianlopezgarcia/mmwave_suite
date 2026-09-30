@@ -101,7 +101,7 @@ def range_azimuth(rec: Recording, frame_index: int,
     if rec.angle_iq is None:
         raise ValueError(
             "this recording has no angle I/Q. Capture with a config whose "
-            "guiMonitor enables rangeAzimuthHeatMap (e.g. angle-ghost), which "
+            "guiMonitor enables rangeAzimuthHeatMap (the `ghost` preset), which "
             "emits TLV %d." % (rec.angle_tlv or 8))
     if not (0 <= frame_index < rec.angle_iq.shape[0]):
         raise IndexError("frame %d out of range (0..%d)"

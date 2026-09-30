@@ -1,0 +1,35 @@
+# Python build artefacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Captures and generated figures.
+#
+# Recordings are data, not source: a .dat is megabytes of bytes that cannot be
+# diffed or reviewed, and every run directory already carries its own .cfg, so
+# the provenance lives with the data rather than in git. Keep runs/ outside the
+# repo (or on shared storage) and pass --runs-root.
+runs/
+*.dat
+*.idx.jsonl
+
+# Figures are reproducible from a .dat plus its .cfg -- that is what
+# manifest.json is for. Regenerate rather than commit.
+Plots/
+*.png

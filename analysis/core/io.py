@@ -52,9 +52,10 @@ def _parser():
 # range_idx_to_meters and doppler_resolution_mps, so the wrong one silently
 # rescales every axis in every figure. Wrong-but-plotted is worse than refusing.
 FALLBACK_CFGS = (
-    "xwr68xx_AOP_10fps.cfg",              # the config used for most captures
-    "xwr68xx_AOP_limb-separation.cfg",
-    "xwr68xx_AOP_microdoppler.cfg",
+    # The TI baseline first: it is what most older captures actually used.
+    "xwr68xx_AOP_ti-baseline_10fps_points.cfg",
+    "xwr68xx_AOP_gait_25fps_points.cfg",
+    "xwr68xx_AOP_ghost_10fps_tlv8.cfg",
 )
 
 

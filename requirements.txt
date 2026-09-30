@@ -1,0 +1,15 @@
+# mmwave_suite dependencies.
+#
+# The parser, config designer and audit tools need only numpy -- deliberately,
+# so integrity checking never depends on a plotting stack. pyserial is needed
+# to talk to the EVM; matplotlib and scipy only for figures and live plots.
+#
+#   pip install -r requirements.txt
+#
+# Lower bounds are what this was developed and tested against, not the minimum
+# that could possibly work.
+
+numpy>=1.24
+pyserial>=3.5          # extraction/link.py, live.py -- EVM serial control
+matplotlib>=3.7        # extraction/viz.py, analysis/plotting/*
+scipy>=1.10            # analysis/micro_doppler/* -- filtering, spectra

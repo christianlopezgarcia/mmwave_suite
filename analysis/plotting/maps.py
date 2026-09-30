@@ -118,6 +118,7 @@ def plot_rt_vt_pair(rt: TimeMap, vt: TimeMap,
     """RT above VT on a shared time axis -- the paper's Figure 3/4 layout."""
     import matplotlib.pyplot as plt
 
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
     fig, axes = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
     for ax, m, ttl in ((axes[0], rt, "RT"), (axes[1], vt, "VT")):
         vmin, vmax = m.clip_percentile(*clip)
@@ -127,7 +128,10 @@ def plot_rt_vt_pair(rt: TimeMap, vt: TimeMap,
                        extent=[float(m.t[0]), float(m.t[-1]),
                                float(m.axis[0]), float(m.axis[-1])],
                        vmin=vmin, vmax=vmax, interpolation="nearest")
-        fig.colorbar(im, ax=ax, label=m.value_label, pad=0.01)
+        # fixed-width cax so RT and VT keep identical plot widths even when
+        # their colorbar labels differ in length
+        cax = make_axes_locatable(ax).append_axes("right", size="2%", pad=0.08)
+        fig.colorbar(im, cax=cax, label=m.value_label)
         ax.set_ylabel(m.axis_label)
         ax.set_title("%s -- %s" % (ttl, m.tier), fontsize=9, loc="left")
     if rt_ylim:

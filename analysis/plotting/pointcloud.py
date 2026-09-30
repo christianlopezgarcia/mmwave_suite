@@ -185,23 +185,34 @@ def velocity_vs_time(f, save_path=None, keep_mask=None, dpi=200):
 
 def _pair(f, save_path, keep_mask, top, bottom, suptitle, dpi=200):
     """`top`/`bottom` are (kind, key, label, kwargs) where kind is
-    'hist' or 'scatter'."""
+    'hist' or 'scatter'.
+
+    Colorbars are attached via make_axes_locatable rather than fig.colorbar.
+    fig.colorbar STEALS width from the axes it is attached to, so a histogram
+    panel (which has one) ends up narrower than a scatter panel (which does
+    not) -- and with sharex the two x-axes then no longer line up, which is
+    exactly the misalignment this replaces. Appending a fixed-width cax to
+    EVERY axes and hiding the unused ones keeps all panels identical.
+    """
     import matplotlib.pyplot as plt
-    import matplotlib.colors as mc
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
     d = _sel(f, keep_mask)
     fig, axes = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
     for ax, (kind, key, label, kw) in zip(axes, (top, bottom)):
+        div = make_axes_locatable(ax)
+        cax = div.append_axes("right", size="2%", pad=0.08)
         if not _guard(ax, d["t"]):
             ax.set_ylabel(label)
+            cax.set_axis_off()
             continue
         if kind == "hist":
-            norm = kw.get("norm")
             h = ax.hist2d(d["t"], d[key], bins=kw.get("bins", [BINS_T, BINS_A]),
-                          cmap=CMAP, norm=norm)
-            fig.colorbar(h[3], ax=ax, label="density")
+                          cmap=CMAP, norm=kw.get("norm"))
+            fig.colorbar(h[3], cax=cax, label="density")
         else:
             ax.scatter(d["t"], d[key], s=2, color=kw.get("color", "tab:blue"),
                        alpha=0.4, rasterized=True)
+            cax.set_axis_off()          # reserve the width, draw nothing
         ax.set_ylabel(label)
         if kw.get("ylim"):
             ax.set_ylim(*kw["ylim"])

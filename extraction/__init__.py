@@ -1,8 +1,8 @@
 """
-mmwave_direct -- an offline, dependency-light replacement for the TI mmWave
-Demo Visualizer data path.
+mmwave_suite.extraction -- an offline, dependency-light replacement for the TI
+mmWave Demo Visualizer data path.
 
-    from mmwave_direct import parse_cfg, parse_dat, StreamParser, RadarLink
+    from mmwave_suite.extraction import parse_cfg, parse_dat, StreamParser
 
 Modules:
     tlv       frame + TLV decoding (port of mmWave.js, with TI's Python
@@ -12,6 +12,10 @@ Modules:
     link      pyserial control of the EVM; no TI Cloud Agent, no network
     live      real-time capture pipeline with byte-complete recording
     audit     prove what is and is not present in a .dat recording
+    design    chirp designer: TI's derived arithmetic and the constraints
+    highfidelity/
+              configs   the four capture presets (the single catalogue)
+              bandwidth the UART budget, and what fits inside it
 """
 
 from .tlv import (  # noqa: F401

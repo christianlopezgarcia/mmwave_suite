@@ -118,6 +118,8 @@ class LiveCapture:
         # survive filesystem sanitisation, but it is exactly what you want to
         # read six weeks later.
         self.label = (label or "").strip() or None
+        self.countdown = 0
+        self.seconds = 0.0
         self.name = name or make_run_name(self.label)
         self.run_dir = os.path.join(out_dir, self.name)
         os.makedirs(self.run_dir, exist_ok=True)
@@ -274,7 +276,33 @@ class LiveCapture:
 
         with open(self.cfg_path, "r", errors="replace") as f:
             lines = f.read().splitlines()
-        self.link.send_config(lines)
+
+        # Split the config at sensorStart. Everything before it merely loads
+        # parameters; sensorStart is the instant the radar begins chirping.
+        # Counting down BEFORE send_config would put "GO" ahead of ~44 command
+        # round-trips, so the subject would start moving a second or two before
+        # frame 1 -- which is the drift this is meant to remove.
+        start_idx = next((i for i, ln in enumerate(lines)
+                          if ln.strip().lower().startswith("sensorstart")), None)
+
+        if start_idx is None:
+            if self.countdown:
+                self._log("WARNING: no sensorStart line found in the .cfg; the "
+                          "countdown cannot be aligned to the first frame.")
+            self.link.send_config(lines)
+        else:
+            self.link.send_config(lines[:start_idx])      # everything but start
+            if self.countdown and self.countdown > 0:
+                print()
+                for n in range(int(self.countdown), 0, -1):
+                    print("  starting in %d ..." % n, flush=True)
+                    time.sleep(1.0)
+                dur = ("%.0f s" % self.seconds) if self.seconds else "until Ctrl-C"
+                print("")
+                print("  >>>>>  START WALKING  <<<<<   (recording %s)" % dur,
+                      flush=True)
+                print("")
+            self.link.send_config(lines[start_idx:])      # sensorStart now
         self.t_config_done = time.perf_counter()
         self._log("configuration accepted; streaming")
 
@@ -391,6 +419,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="short description of the test, appended to the "
                          "timestamped run name. e.g. --label \"behind "
                          "plywood 3m\" -> run_20260729_203433_behind-plywood-3m. The verbatim text is also stored in meta.json.")
+    ap.add_argument("--countdown", "-c", type=int, default=0, metavar="N",
+                    help="count down N seconds before the sensor starts, so you know exactly when to move")
     ap.add_argument("--seconds", type=float, default=0.0,
                     help="stop after N seconds (0 = until Ctrl-C)")
     ap.add_argument("--cli-baud", type=int, default=115200)
@@ -423,6 +453,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     cap = LiveCapture(cli, data, a.cfg, a.out, name=a.name, label=a.label,
                       cli_baud=a.cli_baud, data_baud=a.data_baud,
                       verbose=not a.quiet)
+    cap.countdown = a.countdown
+    cap.seconds = a.seconds
 
     last_print = [0.0]
 

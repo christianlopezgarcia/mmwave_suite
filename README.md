@@ -31,28 +31,42 @@ All commands run from `EEE_500\repo`.
 ## 1. Quick reference
 
 ```powershell
-# record, with a description
-python -m mmwave_suite.extraction.live --cli COM4 --data COM5 `
-  --cfg mmwave_suite\extraction\cfg\xwr68xx_AOP_rdmap-balanced.cfg `
-  --out .\runs --seconds 60 --label "behind plywood 3m"
+# 0. pick a config -- four presets, and the choice cannot be undone later
+python -m mmwave_suite.extraction.highfidelity.configs
 
-# check integrity BEFORE analysing
+# 1. record, with a description and a countdown so you know when to move
+python -m mmwave_suite.extraction.live --cli COM4 --data COM5 `
+  --cfg mmwave_suite\extraction\cfg\xwr68xx_AOP_gait_25fps_points.cfg `
+  --out .\runs --seconds 60 --countdown 5 --label "behind plywood 3m"
+
+# 2. check integrity BEFORE analysing
 $latest = (Get-ChildItem .\runs -Recurse -Filter *.dat | Sort-Object LastWriteTime -Desc | Select -First 1).FullName
 python -m mmwave_suite.extraction.audit $latest
 
-# analyse the newest recording
+# 3. analyse the newest recording
 python -m mmwave_suite.analysis.pipelines.run --latest --raw --all-methods
 ```
+
+**Which config? `ghost` is the go-to.** The thesis question is *ghost or human*,
+and TLV 8 angle I/Q is the only payload that can answer it — a specular ghost is
+defined by arriving from the wrong direction. At 10 fps you still get ~10 samples
+per stride, enough for cadence.
+
+Capture `gait` (25 fps) as a **second pass on the same scene** when gait metrics
+matter: no single config gives both, because TLV 8 costs 73% of the link and frame
+rate is what is left. `doppler` and `survey` are static-scene tools — reach for
+them deliberately. Full table in §6, parameter-by-parameter reference in
+[extraction/cfg/README.md](extraction/cfg/README.md).
 
 Other captures:
 
 ```powershell
-# TLV 8 angle data — for ghosts. Fully wired: adds range_azimuth_frame
-# and AT_dense_following, which no other config produces.
---cfg mmwave_suite\extraction\cfg\xwr68xx_AOP_angle-ghost.cfg
+# TLV 8 angle data -- for ghosts. Adds range_azimuth_frame and
+# AT_dense_following, which no other preset produces.
+--cfg mmwave_suite\extraction\cfg\xwr68xx_AOP_ghost_10fps_tlv8.cfg
 
-# empty room — same geometry as angle-ghost, nobody present
---cfg mmwave_suite\extraction\cfg\xwr68xx_AOP_empty-room.cfg --seconds 30
+# empty room -- the SAME preset, nobody present. A protocol, not a config.
+--cfg mmwave_suite\extraction\cfg\xwr68xx_AOP_ghost_10fps_tlv8.cfg --label empty-room --seconds 30
 ```
 
 ---
@@ -222,10 +236,12 @@ Two-panel comparisons (shared time axis):
 
 ### 4e. TLV 4/8 angle figures — **the ghost-critical ones**
 
-**These appear ONLY if you captured with `angle-ghost`, `empty-room` or
-`both-survey`.** `rdmap-balanced` does *not* emit TLV 8, so with your current
-recordings these figures are absent. The pipeline prints
-`angle_iq (TLV 4/8)  -- absent` when that is the case.
+**These appear ONLY if you captured with `ghost` or `survey`.** `gait` and
+`doppler` do not emit TLV 8, so on those recordings these figures are absent and
+the pipeline prints `angle_iq (TLV 4/8)  -- absent`.
+
+The 2026-09-26 captures *do* carry TLV 8 — `angle-probe` enabled it — so the angle
+figures work on them. Their problem is the 5 fps frame rate, not the payload.
 
 Why they are different from everything else in the repo: TLV 4/8 is the **only
 payload TI ships before its FFT**. It is raw complex I/Q, one sample per virtual
@@ -306,17 +322,17 @@ is how you tell the difference before writing it up as a finding.
 
 ### 4g. Which figures you actually get, per config
 
-| figure | needs | `rdmap-*` | `angle-ghost` / `empty-room` | `both-survey` | `microdoppler*`, `10fps` |
-|---|---|---|---|---|---|
-| `RT_dense`, `RT_points`, `RT_*_with_track` | TLV 2 | yes | yes | yes | yes |
-| all 13 `point_cloud_views/` | TLV 1+7 | yes | yes | yes | yes |
-| `processing_stats`, `temperature` | TLV 6/9 | yes | yes | yes | yes |
-| `envelope_steps`, `step_intervals` | TLV 1 | yes | yes | yes | yes |
-| all ghost method figures | TLV 1+7 | yes | yes | yes | yes |
-| **`VT_following` as a DENSE map** | **TLV 5** | **yes** | no — sparse | **yes** | no — sparse |
-| **`range_azimuth_frame`** | **TLV 4/8** | **no** | **yes** | **yes** | no |
-| **`AT_dense_following`** | **TLV 4/8** | **no** | **yes** | **yes** | no |
-| `range_noise_profile` bottom panel | TLV 3 | **no** | **no** | **no** | **no** |
+| figure | needs | `gait` | `ghost` | `doppler` | `survey` | `ti-baseline` |
+|---|---|---|---|---|---|---|
+| `RT_dense`, `RT_points`, `RT_*_with_track` | TLV 2 | yes | yes | yes | yes | yes |
+| all 13 `point_cloud_views/` | TLV 1+7 | yes | yes | yes | yes | yes |
+| `processing_stats`, `temperature` | TLV 6/9 | yes | yes | yes | yes | yes |
+| `envelope_steps`, `step_intervals` | TLV 1 | yes | yes | yes | yes | yes |
+| all ghost method figures | TLV 1+7 | yes | yes | yes | yes | yes |
+| **`VT_following` as a DENSE map** | **TLV 5** | no — sparse | no — sparse | **yes** | **yes** | no — sparse |
+| **`range_azimuth_frame`** | **TLV 4/8** | **no** | **yes** | **no** | **yes** | no |
+| **`AT_dense_following`** | **TLV 4/8** | **no** | **yes** | **no** | **yes** | no |
+| `range_noise_profile` bottom panel | TLV 3 | **no** | **no** | **no** | **no** | **no** |
 
 Nothing is ever silently skipped — the pipeline prints a payload table at the top
 of every run:
@@ -333,24 +349,24 @@ Payloads present in this recording:
 
 ### 4h. TLV 3 (noise profile) is off in every config — deliberately, for now
 
-`guiMonitor` field 4 is `0` in all ten configs, so the CFAR-margin panel is
-empty. Enabling it costs almost nothing in bytes (2 × numRangeBins per frame) but
-it does push the heat-map presets from 73–75 % to **76–77 %** of the UART, just
-past the 75 % safety line, or costs ~0.5 fps to stay inside it:
+`guiMonitor` field 4 is `0` in every preset, so the CFAR-margin panel is empty.
+Enabling it costs almost nothing in bytes (2 x numRangeBins per frame) but it does
+push the heat-map presets past the 75 % safety line, or costs ~0.5 fps to stay
+inside it:
 
 | preset | without TLV 3 | with TLV 3 | fps to stay ≤75 % |
 |---|---|---|---|
-| `angle-ghost` | 73 % | 76 % | 10.0 → 9.9 |
-| `rdmap-balanced` | 75 % | 76 % | 8.0 → 7.9 |
-| `rdmap-fast` | 75 % | 77 % | 15.2 → 14.8 |
-| `both-survey` | 64 % | 64 % | fits as-is |
+| `gait` | 16 % | 19 % | fits as-is |
+| `ghost` | 73 % | 76 % | 10.0 → 9.9 |
+| `doppler` | 75 % | 76 % | 8.0 → 7.9 |
+| `survey` | 64 % | 64 % | fits as-is |
 
-**Not enabled by default because you have already captured with these configs**,
-and changing one after the fact makes new recordings non-comparable with old
-ones. To add it, edit the preset in
-`extraction/highfidelity/configs.py` (`gui_noise_profile=1`), nudge
-`frame_periodicity_ms` up by ~2 %, and regenerate — `write_all()` refuses to emit
-anything over budget, so it will stop you if it does not fit.
+**Not enabled by default because captures already exist with these presets**, and
+changing one after the fact makes new recordings non-comparable with old ones. To
+add it, set `gui_noise_profile=1` on the preset in
+`extraction/highfidelity/configs.py`, nudge `frame_periodicity_ms` up by ~2 %, and
+regenerate — `write_all()` refuses to emit anything over budget, so it will stop
+you if it does not fit.
 
 ### 4i. Ghost figures (per method)
 
@@ -411,52 +427,84 @@ scene twice, `multiObjBeamForming -1 1 0.5` and `-1 0 0.5`.
 
 ## 6. The config library
 
+Four presets, one catalogue: `extraction/highfidelity/configs.py`. Regenerate the
+`.cfg` files with
+
+```powershell
+python -m mmwave_suite.extraction.highfidelity.configs --all --out mmwave_suite\extraction\cfg
+```
+
 `link%` is the share of the 921600-baud UART consumed. Above ~75 % the link has
-no slack and the device tears frames.
+no slack and the device tears frames. Every preset is validated against both this
+budget and the radar-cube L3 limit before it is written.
 
 | config | rng | dop | fps | rng res | v res | v max | TLV | link% |
 |---|---|---|---|---|---|---|---|---|
-| **`angle-ghost`** | 128 | 128 | 10.0 | 0.087 | 0.064 | ±4.07 | **8** | 73 % |
-| **`empty-room`** | 128 | 128 | 10.0 | 0.087 | 0.064 | ±4.07 | **8** | 73 % |
-| `rdmap-balanced` | 64 | 64 | 8.0 | 0.174 | 0.127 | ±4.06 | **5** | 75 % |
-| `rdmap-fast` | 64 | 32 | 15.2 | 0.174 | 0.254 | ±4.06 | **5** | 75 % |
-| `both-survey` | 64 | 64 | 5.0 | 0.174 | 0.127 | ±4.06 | **5+8** | 64 % |
-| `limb-separation` | 128 | 128 | 20.0 | 0.087 | 0.064 | ±4.07 | – | 12 % |
-| `microdoppler-fast` | 128 | 64 | 25.0 | 0.087 | 0.127 | ±4.07 | – | 16 % |
-| `microdoppler` | 128 | 64 | 10.0 | 0.087 | 0.127 | ±4.07 | – | 6 % |
-| `microdoppler-fine` | 128 | 128 | 10.0 | 0.087 | 0.064 | ±4.07 | – | 6 % |
-| `10fps` | 256 | 16 | 10.0 | 0.044 | 0.122 | **±0.97** | – | 9 % |
+| **`ghost`** ← go-to | 128 | 128 | 10.0 | 0.087 | 0.064 | ±4.07 | **8** | 73 % |
+| **`gait`** | 128 | 64 | **25.0** | 0.087 | 0.127 | ±4.07 | – | 16 % |
+| `doppler` | 64 | 64 | 8.0 | 0.174 | 0.127 | ±4.06 | **5** | 75 % |
+| `survey` | 64 | 64 | 5.0 | 0.174 | 0.127 | ±4.06 | **5+8** | 64 % |
+| `ti-baseline` | 256 | 16 | 10.0 | 0.044 | 0.122 | **±0.97** | – | 9 % |
 
-**`angle-ghost` — TLV 8, complex I/Q per virtual antenna.** The only payload TI
-ships **pre-FFT**, so you can do your own beamforming — and a specular ghost is
+**`gait` — point cloud only, 25 fps. The default for a walking subject.** Sends no
+heat map, so nearly the whole link goes into frame rate. This matters more than it
+looks: Doppler *resolution* comes from the chirps inside one frame, but the frame
+rate sets how finely you can watch the gait cycle evolve. A stride is roughly 1 s,
+so 25 fps gives ~25 samples per stride. Tier C+: dense RT, sparse VT.
+
+**`ghost` — TLV 8, complex I/Q per virtual antenna.** The only payload TI ships
+**pre-FFT**, so you can do your own beamforming — and a specular ghost is
 *defined* by arriving from the wrong direction. Costs nothing in range or Doppler
 resolution: TLV 8 is a zero-Doppler slice, so its size has no `numDopplerBins`
-term. You pay 20 → 10 fps and nothing else. Fully consumed: see §4e.
+term. You pay 25 → 10 fps and nothing else. Fully consumed: see §4e.
 
-**`rdmap-balanced` / `rdmap-fast` — TLV 5, dense range-Doppler, pre-CFAR.**
-Auto-upgrades the recording to **tier B**: RT/VT become the paper's Eq. (1)
-verbatim, every Doppler bin populated instead of ~1.3, and empty-scene
-subtraction becomes possible. **No angle information** — reveals weak multipath
-CFAR was discarding, but cannot discriminate a ghost.
+Measured, not assumed: the TLV 8 payload is **3072 bytes** per frame at 64 range
+bins = `4 x 12 virtual ant x 64`, decoding to a `(64, 12) complex64` array with
+zero parse anomalies.
 
-**`both-survey`** — everything at 5 fps. Static-scene study, not gait.
+Also the preset for an **empty-room reference** — that is a capture protocol, not
+a different config. Use `--label empty-room`.
 
-**`limb-separation` / `microdoppler*`** — point cloud only, tier C+: dense RT but
-a **sparse VT** (~1.3 of 128 bins populated). Fast, cheap on bandwidth.
+**`doppler` — TLV 5, dense range-Doppler, pre-CFAR.** Upgrades the recording to
+**tier B**: RT/VT become the paper's Eq. (1) verbatim, every Doppler bin
+populated instead of ~1.3, and empty-scene subtraction becomes possible. **No
+angle information** — reveals weak multipath CFAR was discarding, but cannot
+discriminate a ghost on its own.
 
-**`10fps` — the old baseline. Do not use for new work.** Its ±0.97 m/s ceiling
-aliases every walking limb: a hand at 2.4 m/s folds back to a wrong velocity.
-This is the config that was hiding your micro-Doppler.
+**`survey` — both heat maps at 5 fps.** Static-scene study, not gait.
+
+**`ti-baseline` — archival only. Do not use for new work.** Not generated; a
+byte-identical TI Visualizer export kept because older recordings depend on it.
+Its ±0.97 m/s ceiling aliases every walking limb: a hand at 2.4 m/s folds back to
+a wrong velocity. This is the config that was hiding the micro-Doppler.
+
+### Presets removed in the 2026-09-29 cleanup
+
+Twelve presets across two separate catalogues (`design.py` and
+`highfidelity/configs.py`) were collapsed into the four above. Deleted:
+`angle-probe`, `angle-ghost`, `empty-room`, `both-survey`, `rdmap-balanced`,
+`rdmap-fast`, `baseline`, `balanced`, `microdoppler`, `microdoppler-fast`,
+`microdoppler-fine`, `limb-separation`.
+
+Nothing became unreproducible: `live.py` copies the exact `.cfg` it sent into
+every run directory, and all 37 existing runs carry theirs.
+
+**`angle-probe` is the one worth remembering.** It was a 5 fps, 32-Doppler-bin
+*diagnostic*, written to measure the real TLV 8 payload size once and then be
+replaced. It never was — every capture on 2026-09-26 used it. At 5 fps you get
+about 5 samples per stride, so the gait metrics from that session are not
+trustworthy; that is a Nyquist problem in the data, and no analysis code can
+repair it. Those runs need recapturing with `gait`. The preset has been deleted so
+it cannot be picked again.
 
 ### Recommended order
 
-1. **`rdmap-balanced`** — the one change that measurably improves what you
-   already analyse. Tier B, dense VT, Eq. (1) maps, working today.
-2. **`empty-room`** immediately after, before anything in the room moves. 30 s,
-   nobody present. **The only step that cannot be added later.**
-3. **`angle-ghost`** — the config your thesis needs. Now fully wired (§4e).
-4. `microdoppler-fast` (25 fps) if you want time resolution and can accept a
-   sparse VT.
+1. **`gait`** — recapture the 2026-09-26 protocol properly. 25 fps, the walking
+   data the gait metrics actually need.
+2. **`ghost` with `--label empty-room`** — 30 s, nobody present, before anything
+   in the room moves. **The only step that cannot be added later.**
+3. **`ghost`** — the config the thesis needs for multipath discrimination (§4e).
+4. `doppler` if you want tier-B dense VT maps and can accept losing angle.
 
 ---
 
@@ -465,9 +513,9 @@ This is the config that was hiding your micro-Doppler.
 If no `.cfg` sits beside the `.dat` and you pass no `--cfg`, the loader falls back
 in this order and prints a loud banner:
 
-1. `xwr68xx_AOP_10fps.cfg` ← **the default**
-2. `xwr68xx_AOP_limb-separation.cfg`
-3. `xwr68xx_AOP_microdoppler.cfg`
+1. `xwr68xx_AOP_ti-baseline_10fps_points.cfg` ← **the default**
+2. `xwr68xx_AOP_gait_25fps_points.cfg`
+3. `xwr68xx_AOP_ghost_10fps_tlv8.cfg`
 
 `cfg_is_fallback` is recorded in the `Recording` and every `manifest.json`.
 
@@ -501,12 +549,22 @@ run has its `.cfg` sitting beside it.
 ## 8. Design tools
 
 ```powershell
-python -m mmwave_suite.extraction.design --compare            # chirp trade-offs
+python -m mmwave_suite.extraction.highfidelity.configs        # compare all four presets
+python -m mmwave_suite.extraction.design --preset gait        # full report for one
 python -m mmwave_suite.extraction.highfidelity.bandwidth      # UART budget survey
-python -m mmwave_suite.extraction.highfidelity.configs        # heat-map presets
+
+# regenerate every .cfg after editing a preset
+python -m mmwave_suite.extraction.highfidelity.configs --all --out mmwave_suite\extraction\cfg
 ```
 
-`design.py` reports Doppler **bin spacing** and **true (CPI-limited) resolution**
+There is **one** preset catalogue: `extraction/highfidelity/configs.py`.
+`design.py` is the chirp *model* — it computes TI's derived arithmetic and checks
+the constraints — and its `--preset` flag reads that same catalogue. Keeping one
+list is deliberate: a preset cannot be bandwidth-checked in one place and
+unchecked in another, which is how `angle-probe` ended up being used for a whole
+day of production captures.
+
+Both report Doppler **bin spacing** and **true (CPI-limited) resolution**
 separately. They differ when the FFT is zero-padded, and only the second governs
 whether two scatterers can actually be separated.
 
@@ -514,14 +572,27 @@ whether two scatterers can actually be separated.
 
 ## 9. Known limits
 
-- **Gait metrics are not yet trustworthy.** Cadence agrees with the independent
-  spectral estimate to 4 %, but CV ≈ 78 % and spectral confidence 0.02. The step
-  detector needs calibrating against a walk where you counted the steps.
+- **Gait metrics are not yet trustworthy, and the cause is partly the capture.**
+  On the test run the two independent cadence estimators disagreed, with CV ≈ 78 %
+  and spectral confidence 0.02, so the step detector needs calibrating against a
+  walk where the steps were counted by hand. But every recording from 2026-09-26
+  also used `angle-probe`, a 5 fps diagnostic preset — roughly 5 samples per
+  stride. That is a Nyquist problem in the data that no amount of analysis can
+  repair. Recapture with `gait` (25 fps) before trusting any gait number.
+- **No empty-room reference capture exists yet.** It is the control arm of the
+  panel intervention in `GHOST_VALIDATION_PLAN.txt` and the prerequisite for
+  background subtraction, and it is the one thing that cannot be added after the
+  fact. 30 s with the `ghost` preset and nobody in the room.
+- **No ghost method is validated.** There is no labelled ground truth; the six
+  methods are physically-motivated hypotheses. The cheap decisive experiment —
+  matched captures at `multiObjBeamForming -1 1 0.5` and `-1 0 0.5` — has not been
+  run.
 - **Raw ADC is impossible over UART** — 11.8 MB/s against a 92 KB/s link, 128×
   over. Needs LVDS + a DCA1000EVM.
 - **Coherent (ADC-domain) background subtraction** is out of reach; the
   implemented empty-scene subtraction works on RD magnitudes, weaker than the
   reference MATLAB's pre-FFT cancellation.
-- **This repo is not under version control.** The sibling `repo/mmwave_analysis`
-  lost a session of uncommitted work to a discarded changeset; `mmwave_suite`
-  currently holds the only copy of several fixes.
+- **No automated tests.** Correctness rests on `audit.py` against real captures
+  and on the cross-checks in `extraction/README.md`, not on a suite.
+- **Licence undecided.** `analysis/archive/ti_mmw_official_tool/` is TI BSD-3;
+  settle the licence for the rest before sharing outside the group.

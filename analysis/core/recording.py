@@ -49,6 +49,11 @@ class Geometry:
     def fps(self) -> float:
         return 1.0 / self.frame_period_s if self.frame_period_s else 0.0
 
+    @property
+    def num_virtual_ant(self) -> int:
+        """Tx x Rx. Sizes the TLV 4/8 angle payload."""
+        return self.num_tx_ant * self.num_rx_ant
+
     def range_axis(self) -> np.ndarray:
         """Range of each bin, in metres. Bias-corrected and clamped at 0."""
         return np.maximum(

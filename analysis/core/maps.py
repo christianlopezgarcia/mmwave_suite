@@ -146,13 +146,22 @@ def _sparse_range_time(rec: Recording):
 
 def velocity_time_map(rec: Recording,
                       roi_m: Optional[Tuple[float, float]] = None,
-                      prefer: str = "auto") -> TimeMap:
-    """VT(v, t)."""
+                      prefer: str = "auto",
+                      keep_mask: Optional[np.ndarray] = None) -> TimeMap:
+    """VT(v, t).
+
+    `keep_mask` is a per-point boolean from a ghost method; None means raw.
+    A point-cloud decision cannot filter the measured TLV-5 spectrum, so a
+    mask forces the sparse points path (same honesty rule as
+    sparse_range_time_masked).
+    """
     g = rec.geom
     v_axis = g.velocity_axis()
 
     use = prefer
-    if use == "auto":
+    if keep_mask is not None:
+        use = "points"
+    elif use == "auto":
         use = "rd" if rec.rd_map is not None else "points"
 
     if use == "rd":
@@ -168,7 +177,7 @@ def velocity_time_map(rec: Recording,
                 "range-Doppler map")
         val = "power (linear)"
     else:
-        data, prov = _sparse_velocity_time(rec, roi_m)
+        data, prov = _sparse_velocity_time(rec, roi_m, keep_mask)
         val = "point density"
 
     return TimeMap(data, v_axis, rec.t, "Velocity (m/s)", val,
@@ -176,20 +185,27 @@ def velocity_time_map(rec: Recording,
 
 
 def _sparse_velocity_time(rec: Recording,
-                          roi_m: Optional[Tuple[float, float]]):
+                          roi_m: Optional[Tuple[float, float]],
+                          keep_mask: Optional[np.ndarray] = None):
     g = rec.geom
     n_v, n_f = g.num_doppler_bins, rec.num_frames
     data = np.zeros((n_v, n_f))
     half = n_v // 2
+    off = 0
     for i, p in enumerate(rec.points):
-        if p is None or p.size == 0:
+        n_pts = 0 if p is None else p.size
+        if n_pts == 0:
             continue
+        sl = slice(off, off + n_pts)
+        off += n_pts
         r = np.sqrt(p["x"].astype(float) ** 2 + p["y"].astype(float) ** 2
                     + p["z"].astype(float) ** 2)
         v = p["doppler"].astype(float)
         keep = np.ones(v.size, bool)
         if roi_m is not None:
             keep = (r >= roi_m[0]) & (r <= roi_m[1])
+        if keep_mask is not None and keep_mask.size >= off:
+            keep &= keep_mask[sl]
         if not keep.any():
             continue
         idx = np.clip(np.round(v[keep] / g.doppler_resolution_mps).astype(int)

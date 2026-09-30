@@ -174,12 +174,25 @@ def run_gait(rec: Recording, out_dir: str, roi_m=None,
             title="RT with target track -- %s" % rec.name,
             overlays=[dict(t=track.t, y=track.range_m, style="w-",
                            label="tracked range", lw=1.6)]))
-        vt = velocity_time_following(rec, track, half_width_m=0.25,
-                                     keep_mask=keep_mask)
-        vt_name = "VT_following%s.png" % suffix
-        vt_title = "VT, target-following +-0.25 m%s -- %s" % (ttl, rec.name)
+        try:
+            vt = velocity_time_following(rec, track, half_width_m=0.25,
+                                         keep_mask=keep_mask)
+            vt_name = "VT_following%s.png" % suffix
+            vt_title = "VT, target-following +-0.25 m%s -- %s" % (ttl, rec.name)
+        except ValueError as e:
+            # No usable track -- almost always a recording with no moving
+            # target. Degrade to a fixed-ROI VT rather than aborting: the
+            # point-cloud, range-profile and angle figures are all still valid
+            # and worth writing, and a static capture is a legitimate thing to
+            # record (an empty-room reference IS one).
+            print("   NOTE: %s" % e)
+            print("   -> falling back to a fixed-ROI VT; gait metrics will be "
+                  "meaningless for a static scene.")
+            vt = velocity_time_map(rec, roi_m=roi_m, keep_mask=keep_mask)
+            vt_name = "VT_fixed_roi%s.png" % suffix
+            vt_title = "VT, fixed ROI (no usable track)%s -- %s" % (ttl, rec.name)
     else:
-        vt = velocity_time_map(rec, roi_m=roi_m)
+        vt = velocity_time_map(rec, roi_m=roi_m, keep_mask=keep_mask)
         vt_name = "VT_fixed_roi%s.png" % suffix
         vt_title = "VT, fixed ROI%s -- %s" % (ttl, rec.name)
 

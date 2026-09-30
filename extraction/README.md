@@ -1,11 +1,22 @@
-# mmwave_direct
+# mmwave_suite.extraction
 
 An offline replacement for the TI mmWave Demo Visualizer data path, plus the
-audit evidence behind it.
+audit evidence behind it. This half of the suite talks to the radar; nothing in
+[analysis/](../analysis/) does.
 
 Built for: xWR68xx_AOP, mmWave SDK 3.6, Visualizer 3.6.0.0.
 Dependencies: `numpy`, `pyserial`, and `matplotlib` + `scipy` for `viz.py`
 (the parser, config and audit tools need only numpy). No network, ever.
+
+**Run every command below from the directory that contains `mmwave_suite/`.**
+
+```bash
+python -m mmwave_suite.extraction.live      # record a .dat
+python -m mmwave_suite.extraction.viz       # live plots / replay
+python -m mmwave_suite.extraction.audit     # .dat integrity check
+python -m mmwave_suite.extraction.design    # chirp / config designer
+python -m mmwave_suite.extraction.highfidelity.configs   # the capture presets
+```
 
 ---
 
@@ -367,42 +378,90 @@ back for comparison.
 
 ## 5. What to run
 
-Three commands cover everything.
+Four commands cover everything: pick a config, record, look, audit.
 
-### Record a `.dat` (replaces Record Start / Record Stop)
+### Step 0 — pick a capture config
+
+There are **four presets**, and choosing the wrong one cannot be fixed later. If
+a payload was not enabled at capture time, the bytes were never transmitted.
 
 ```bash
-python -m mmwave_direct.live --list-ports          # find your two COM ports
-python -m mmwave_direct.live --cli COM4 --data COM5 --cfg profile.cfg \
-       --out ./runs --seconds 120
+python -m mmwave_suite.extraction.highfidelity.configs          # compare all four
+python -m mmwave_suite.extraction.design --preset gait          # full report for one
+```
+
+| preset | fps | rng x dop | extra payload | use for |
+|---|---|---|---|---|
+| `ghost` | 10 | 128 x 128 | TLV 8 (angle I/Q) | **the go-to** — multipath / ghost work, empty-room reference |
+| `gait` | **25** | 128 x 64 | none | walking, micro-Doppler, limb motion |
+| `doppler` | 8 | 64 x 64 | TLV 5 (RD map) | dense pre-CFAR range-Doppler, Tier B RT/VT |
+| `survey` | 5 | 64 x 64 | TLV 5 + TLV 8 | careful static-scene study |
+
+**`ghost` is the default choice** — it is the only preset that can answer the
+ghost-vs-human question, because angle is the only discriminator a specular image
+cannot hide from. Capture `gait` as a second pass when gait metrics matter.
+
+**Frame rate is the parameter that bites.** Doppler resolution comes from the
+chirps inside one frame; the frame rate sets how finely you can watch the gait
+cycle evolve. A stride is roughly 1 s, so 5 fps gives about 5 samples per stride
+and cannot resolve limb swing regardless of Doppler bin count. See
+[cfg/README.md](cfg/README.md) for the full reasoning, a parameter-by-parameter
+reference, and [cfg/archive/](cfg/archive/) for what the superseded presets
+offered.
+
+Every preset is validated against both the radar-cube L3 limit and the UART
+budget before it is written — enabling a heat map without shrinking the geometry
+pushes the device past ~92 KB/s and it tears frames, which looks like a hardware
+fault rather than a config mistake.
+
+### Step 1 — record a `.dat` (replaces Record Start / Record Stop)
+
+```bash
+python -m mmwave_suite.extraction.live --list-ports      # find your two COM ports
+
+python -m mmwave_suite.extraction.live --cli COM4 --data COM5 \
+       --cfg mmwave_suite/extraction/cfg/xwr68xx_AOP_gait_25fps_points.cfg \
+       --out runs --label "behind drywall 3m" --countdown 5 --seconds 60
 ```
 
 Writes `runs/<name>/<name>.dat` — same format as TI's, so it still replays in
-the Visualizer and in your existing `dat_parser_plots` scripts — plus the
-`.cfg`, a `.meta.json`, and a per-frame `.idx.jsonl` with host timestamps. No
-plots, minimal CPU; use this when you only want clean data.
+the Visualizer — plus the `.cfg` actually sent, a `.meta.json`, and a per-frame
+`.idx.jsonl` with host timestamps. No plots, minimal CPU; use this whenever the
+data matters.
 
-### See the plots (replaces the Visualizer Plots tab)
+Two flags worth knowing:
+
+* `--label "..."` is appended to the timestamped run name and stored verbatim in
+  `meta.json`. `--label "behind drywall 3m"` gives
+  `run_20260929_142233_behind-drywall-3m`. Six weeks later this is the only
+  thing that tells you what a recording was.
+* `--countdown N` counts down N seconds and prints `>>> START WALKING <<<` at
+  the instant the sensor actually starts. The countdown is inserted *between*
+  the parameter commands and `sensorStart`, not before the whole config, because
+  a config takes ~44 command round-trips to send — counting down first would put
+  "GO" a second or two ahead of frame 1, which is exactly the drift it removes.
+
+### Step 2 — see the plots (replaces the Visualizer Plots tab)
 
 ```bash
 # live from the EVM, and record at the same time
-python -m mmwave_direct.viz --cli COM4 --data COM5 --cfg profile.cfg --out ./runs
+python -m mmwave_suite.extraction.viz --cli COM4 --data COM5 --cfg profile.cfg --out ./runs
 
 # replay a recording at its real frame rate
-python -m mmwave_direct.viz --dat capture.dat --cfg capture.cfg
+python -m mmwave_suite.extraction.viz --dat capture.dat --cfg capture.cfg
 
 # replay fast, TI-style point persistence for comparison
-python -m mmwave_direct.viz --dat capture.dat --cfg capture.cfg --fast --accumulate 3
+python -m mmwave_suite.extraction.viz --dat capture.dat --cfg capture.cfg --fast --accumulate 3
 ```
 
 Useful flags: `--accumulate SECONDS` (0 = one frame, the default),
 `--range-width` / `--range-depth` (TI's Plot Settings boxes, default 5 / 10 m),
 `--linear` (range profile on a linear axis instead of dB), `--fast`.
 
-### Check a recording's integrity
+### Step 3 — check a recording's integrity
 
 ```bash
-python -m mmwave_direct.audit capture.dat --cfg capture.cfg
+python -m mmwave_suite.extraction.audit capture.dat --cfg capture.cfg
 ```
 
 ### Capture integrity: use `live.py`, not `viz.py`, for data that matters
@@ -442,12 +501,12 @@ for a counter reset near the beginning and discard the frames before it.
 
 ---
 
-## 5b. Usage details
+## 5b. Reference details
 
 ### Audit an existing recording
 
 ```bash
-python -m mmwave_direct.audit path/to/file.dat --cfg path/to/matching.cfg
+python -m mmwave_suite.extraction.audit path/to/file.dat --cfg path/to/matching.cfg
 ```
 
 Reports byte accounting, TLV composition and ordering, header-vs-payload
@@ -458,15 +517,9 @@ consumption.
 Always pass the .cfg that was used for **that** capture — the audit
 cross-checks derived range-bin count against what is actually in the stream.
 
-### Live capture, no Visualizer
+### What a run directory contains
 
-```bash
-python -m mmwave_direct.live --list-ports
-python -m mmwave_direct.live --cli COM4 --data COM5 --cfg profile.cfg \
-    --out ./runs --seconds 120
-```
-
-Produces, per run:
+Every `live.py` capture produces, per run:
 
 * `<name>.dat` — raw UART bytes, same format as a TI recording, so it still
   plays back in the Visualizer and in your existing `dat_parser_plots` pipeline
@@ -479,7 +532,7 @@ Produces, per run:
 ### As a library
 
 ```python
-from mmwave_direct import parse_cfg, parse_dat, StreamParser
+from mmwave_suite.extraction import parse_cfg, parse_dat, StreamParser
 
 cfg = parse_cfg("profile.cfg")
 print(cfg.summary())
@@ -527,22 +580,49 @@ a distinction that matters when the thing you are classifying is a mirror image.
 
 ---
 
-## 7. Recommended next steps for the ghost-filtering work
+## 7. Status and next steps for the ghost-filtering work
 
-1. **Re-parse every dataset with `mmwave_direct` and re-run the analysis.** The
-   through-wall recordings are the ones most affected; conclusions drawn from
-   the 34–93 % subsets need re-checking.
-2. **Keep empty frames in the time series.** They carry information: an absent
-   detection is evidence, and the gaps are what a tracker needs to not
-   hallucinate continuity.
-3. **Treat `multiObjBeamForming` as an experimental variable.** Capture matched
-   pairs with it on and off. It is a documented generator of same-bin secondary
-   angular peaks — a plausible source of some of your ghosts, and a cheap
-   ablation.
-4. **Reconsider 1 fps for micro-Doppler.** `door_metal_1fps.cfg` has
-   `frameCfg ... 1000` (1 Hz). Gait and limb micro-Doppler need frame rates
-   in the tens of Hz. The `.dat` files at 450 frames / 300 frames suggest other
-   configs are already faster — confirm which .cfg goes with which capture.
-5. **Record the .cfg with every capture.** `live.py` does this automatically;
-   several existing `.dat` files have no reliably matched `.cfg`, which makes the
-   range/Doppler axes guesswork.
+Done, and no longer open questions:
+
+* **The `.dat` is a verbatim copy of the UART stream.** Established in §1 against
+  both the Visualizer source and 14 recordings. The loss is on-chip (§1.4), not
+  host-side.
+* **Empty frames are kept.** `tlv.py` dispatches on TLV *type* and treats a
+  zero-detection frame as valid data, so the 34–93% losses in §2.1 no longer
+  happen. An absent detection is evidence; the gaps are what a tracker needs in
+  order not to hallucinate continuity.
+* **Every capture records its own `.cfg`.** `live.py` copies it into the run
+  directory, so no recording has guessed axes.
+* **TLV 8 works and its payload size is now measured, not inferred.** On
+  `run_20260805_163244_tlv8-probe`: 76/76 frames, 0.0000% bytes lost, zero parse
+  anomalies, payload 3072 bytes = `4 x 12 virtual ant x 64 range bins`, decoding
+  to a `(64, 12) complex64` array. The earlier worry that the real payload might
+  be twice the inferred size — which would have put a full-resolution angle
+  config at 139% of the UART — is settled: the inference was right.
+
+Still open, in priority order:
+
+1. **Recapture the 2026-09-26 session with a production preset.** Every run that
+   day used `angle-probe`, a 5 fps / 32-Doppler-bin diagnostic that was meant to
+   be run once and replaced. At 5 fps you get roughly 5 samples per stride, so
+   the gait metrics from that session are not trustworthy — this is a Nyquist
+   problem in the capture, and no analysis code can repair it. Use `gait` for
+   walking subjects, `ghost` when angle is needed. The preset has been deleted so
+   it cannot be picked again.
+
+2. **Treat `multiObjBeamForming` as an experimental variable, not a default.** It
+   reports secondary angular peaks at ≥50% of the dominant peak within the same
+   range-Doppler bin — a documented generator of exactly the ghost points being
+   classified. Capture matched pairs at `-1 1 0.5` and `-1 0 0.5`: points present
+   in the first and absent in the second are device-declared secondary peaks by
+   construction. This is the cheapest ablation available and it has not been run.
+
+3. **Capture an empty-room reference with the `ghost` preset.** Needed for
+   background subtraction and as the control arm of the panel intervention in
+   `GHOST_VALIDATION_PLAN.txt`. Same config, `--label empty-room`.
+
+4. **Decide whether the thesis needs Tier B.** The `doppler` preset gives the
+   dense pre-CFAR range-Doppler spectrum, which is the only way to get the
+   paper's Eq. (1) VT map verbatim instead of a sparse reconstruction from CFAR
+   points. It costs angle information and drops to 8 fps, so it is a separate
+   capture rather than an upgrade — see [analysis fidelity tiers](../analysis/README.md).
